@@ -1,6 +1,23 @@
-# llamaseye — Exhaustive llama-bench parameter sweep harness
+# smartsweep — Autonomous agent-driven inference benchmarking
 
-Systematically sweep every meaningful llama-bench parameter combination for any GGUF model, record every result as JSONL, and surface the optimal configuration for your hardware.
+Smartsweep combines **llamaseye**'s exhaustive llama-bench sweep engine with **autoresearch**'s autonomous agent loop. Instead of brute-forcing every parameter combination, an AI agent reads your optimization goal from `strategy.md`, proposes targeted experiments, runs them via llamaseye, and iterates — finding the fastest inference config for your model and hardware while you sleep.
+
+Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch).
+
+---
+
+## How it works
+
+1. Edit `strategy.md` to set your model path and minimum context requirement
+2. Point Claude (or any agent) at `strategy.md` and let it run
+3. The agent establishes a baseline with phases 0–6, then loops Phase 7 — proposing, running, and logging targeted config variations
+4. Wake up to `results.tsv`: a ranked log of every experiment with keep/discard decisions
+
+The underlying sweep engine (`llamaseye.sh`) is unchanged — the agent drives it via CLI flags and `SWEEP_*` env vars. `sweep.jsonl` remains the source of truth.
+
+---
+
+## What it does (sweep engine)
 
 ---
 
