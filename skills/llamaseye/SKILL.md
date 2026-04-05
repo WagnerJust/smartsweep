@@ -66,6 +66,18 @@ bash ~/llamaseye.sh --model ~/Models/model.gguf --only-phases 6,7
 # Unattended overnight
 nohup bash ~/llamaseye.sh --models-dir ~/Models > /dev/null 2>&1 &
 tail -f ~/Models/bench/sweep/sweep.log
+
+# ── Server lifecycle hooks (OPTIONAL) ────────────────────────────────────────
+# Only needed if another process (Ollama, llama-power, LM Studio, etc.) is
+# holding VRAM on the same machine. Cloud agents, dedicated bench machines,
+# or any setup where nothing else uses the GPU can skip this entirely.
+#
+# If set, SWEEP_PRE_CMD runs before Phase 0 and SWEEP_POST_CMD runs on exit
+# (clean finish, crash, or Ctrl-C). Leave both unset to do nothing.
+#
+# export SWEEP_PRE_CMD="llama-power-stop"    # or: systemctl stop ollama
+# export SWEEP_POST_CMD="llama-power-start"  # or: systemctl start ollama
+# bash ~/llamaseye.sh --model ~/Models/model.gguf
 ```
 
 ---
@@ -185,6 +197,8 @@ source .env && bash llamaseye.sh --models-dir ~/Models --output-dir ~/Models/ben
 
 | Variable | What it controls | Example |
 |----------|-----------------|----------|
+| `SWEEP_PRE_CMD` | *(Optional)* Shell command to run before Phase 0. Only needed if another process holds VRAM on the same machine (Ollama, llama-power, LM Studio, etc.). Sweep aborts if this fails. Leave unset on cloud/dedicated bench machines. | `llama-power-stop` |
+| `SWEEP_POST_CMD` | *(Optional)* Shell command to run on EXIT (clean finish, crash, or Ctrl-C). Pair with `SWEEP_PRE_CMD` to restart whatever it stopped. Always fires; leave unset if `SWEEP_PRE_CMD` is unset. | `llama-power-start` |
 | `LLAMA_BENCH_BIN` | Path to the standard llama-bench binary | `~/llama.cpp/build/bin/llama-bench` |
 | `SWEEP_TURBO_BENCH_BIN` | Path to TurboQuant binary (optional) | `~/llama-cpp-turboquant/build/bin/llama-bench` |
 | `SWEEP_MODELS_DIR` | Directory scanned for .gguf files | `~/Models` |

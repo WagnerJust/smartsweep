@@ -73,6 +73,16 @@ SWEEP_PRIO="${SWEEP_PRIO:-2}"
 # Requires python3. Conflicts with explicit --start-* / --min-* flags.
 OPT_OPTIMIZED_SWEEP="${SWEEP_OPTIMIZED_SWEEP:-false}"
 
+# Shell command to run before the first model sweep begins (e.g. stop a server
+# to free VRAM). Runs after hardware detection and the confirmation prompt, but
+# before any llama-bench invocation.  Leave empty to skip.
+SWEEP_PRE_CMD="${SWEEP_PRE_CMD:-}"
+
+# Shell command to run after all sweeps finish (or on any exit — including
+# errors and SIGINT).  Intended to restart whatever SWEEP_PRE_CMD stopped.
+# Executed via a bash EXIT trap so it fires even on crash or Ctrl-C.
+SWEEP_POST_CMD="${SWEEP_POST_CMD:-}"
+
 # =============================================================================
 # RUNTIME STATE — populated during execution, not user-configurable
 # =============================================================================
@@ -2964,6 +2974,17 @@ main() {
         printf "Ready to sweep %d model(s). Output -> %s\n" "${#MODEL_LIST[@]}" "${SWEEP_OUTPUT_DIR}"
         read -r -p "Continue? [y/N] " reply
         [[ "${reply}" =~ ^[Yy]$ ]] || die "Aborted by user"
+    fi
+
+    # Register POST hook first so it fires on any exit from this point on
+    if [[ -n "${SWEEP_POST_CMD}" ]]; then
+        trap 'log "[hook] Running SWEEP_POST_CMD: ${SWEEP_POST_CMD}"; eval "${SWEEP_POST_CMD}" || true' EXIT
+    fi
+
+    # Run PRE hook — intended to free VRAM before Phase 0 touches the GPU
+    if [[ -n "${SWEEP_PRE_CMD}" ]]; then
+        log "[hook] Running SWEEP_PRE_CMD: ${SWEEP_PRE_CMD}"
+        eval "${SWEEP_PRE_CMD}" || die "SWEEP_PRE_CMD failed — aborting sweep"
     fi
 
     local model
