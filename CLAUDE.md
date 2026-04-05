@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**llamaseye** is a single-file Bash script (`llamaseye.sh`) that exhaustively benchmarks every meaningful llama-bench parameter combination for GGUF models. There is no build step — the entry point is the script itself.
+**smartsweep** combines two things:
+
+1. **llamaseye** (`llamaseye.sh`) — a single-file Bash sweep engine that exhaustively benchmarks every meaningful llama-bench parameter combination for GGUF models. No build step.
+2. **Agent loop** — an AI agent reads `strategy.md` (the research objective), runs llamaseye phases, and iterates to find the fastest inference config. Results are logged to `results.tsv`.
+
+The agent loop is described in `strategy.md`. The sweep engine is `llamaseye.sh`.
 
 ## Running the script
 
@@ -29,6 +34,12 @@ bash llamaseye.sh --model ~/Models/model.gguf --only-phases 6,7
 
 # Dry run (print commands without executing)
 bash llamaseye.sh --model ~/Models/model.gguf --dry-run
+
+# Goal-directed Phase 7 — stop early once a config meets the spec
+bash llamaseye.sh --model ~/Models/model.gguf --only-phases 7 --goal "ctx=32768,tg=5"
+
+# Fine context ceiling — midpoint bisection inside Phase 6 for precise ceiling
+bash llamaseye.sh --model ~/Models/model.gguf --fine-ctx
 ```
 
 **Environment / .env file:**
@@ -38,6 +49,34 @@ cp example.env .env
 source .env && bash llamaseye.sh --models-dir ~/Models
 ```
 `.env` is gitignored. `example.env` documents every available variable with defaults.
+
+**Server lifecycle hooks (optional — only if something else shares the GPU):**
+
+On cloud instances, dedicated bench machines, or any setup where nothing else uses the GPU,
+you can skip this entirely — just run llamaseye.sh directly.
+
+If the machine runs Ollama, LM Studio, llama-power, or any other process that holds VRAM,
+you should stop it before sweeping. llamaseye has built-in hooks for this:
+
+```bash
+# Stop your server before the sweep, restart it after (even on crash/Ctrl-C)
+export SWEEP_PRE_CMD="llama-power-stop"   # or: systemctl stop ollama / lms server stop
+export SWEEP_POST_CMD="llama-power-start" # or: systemctl start ollama / lms server start
+bash llamaseye.sh --model ~/Models/model.gguf
+```
+
+Or via `.env`:
+```bash
+SWEEP_PRE_CMD="llama-power-stop"
+SWEEP_POST_CMD="llama-power-start"
+```
+
+Leave both unset (the default) to skip the hooks entirely.
+
+**Why it matters when set:** Phase 0 binary-searches for `MAX_NGL` — the maximum GPU layers
+that fit in VRAM. If another process is holding VRAM when Phase 0 runs, `MAX_NGL` will be
+wrong and will poison every downstream phase. `SWEEP_POST_CMD` is registered as a bash
+`EXIT` trap so it fires on clean exit, crash, and Ctrl-C — the server always comes back.
 
 ## Architecture
 
@@ -108,6 +147,30 @@ OPT_RESUME="${SWEEP_RESUME:-false}"   # env var sets default; CLI overrides
 - Pure-bash array builders are used in `save_state()` instead of jq pipelines (a previous bug source — jq arrays from bash loops had quoting issues)
 - Phase functions append to working sets with `WS_NGL+=" $val"` (space-separated strings, not arrays) to survive subshell boundaries
 - OOM detection uses `detect_oom()` called on the raw output file, not stderr trapping, because `timeout` complicates signal propagation
+
+## Agent loop workflow
+
+The agent loop (described in `strategy.md`) follows this pattern:
+
+1. Create a branch `smartsweep/<tag>` (e.g. `smartsweep/apr5`)
+2. Run phases 0–6 as baseline to establish working sets and context ceiling
+3. Loop: read `sweep.jsonl`, propose a Phase 7 variation, run it with `--only-phases 7 [--goal ...]`, record the best result in `results.tsv`, commit if improved
+4. `results.tsv` is the experiment log — columns: `commit tok_s ctx ngl fa ctk batch ubatch threads nkvo status description`
+
+The agent must never modify `llamaseye.sh` core logic, output formats, or hardware detection. Only `SWEEP_*` env vars, phase selection, and `--goal` flags are in scope.
+
+**Querying sweep.jsonl** (source of truth, not sweep.md):
+```bash
+# Best tok/s from Phase 7
+jq -r 'select(.phase==7) | [.tok_s, .ngl, .ctx, .fa, .ctk, .batch, .ubatch, .threads, .nkvo] | @tsv' \
+  results/*/sweep.jsonl | sort -rn | head -5
+```
+
+## Linting
+
+```bash
+shellcheck llamaseye.sh
+```
 
 ## Documentation update rule
 
