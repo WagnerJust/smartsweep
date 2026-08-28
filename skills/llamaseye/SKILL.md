@@ -34,7 +34,7 @@ description: >
 | Default output | `~/Models/bench/sweep/` |
 | llama-bench (standard) | `~/llama.cpp/build/bin/llama-bench` |
 | llama-bench (TurboQuant) | `~/llama-cpp-turboquant/build/bin/llama-bench` |
-| llamaseye script | `~/Src/llamaseye/llamaseye.sh` (cloned via git) |
+| llamaseye script | `~/Src/smartsweep/llamaseye.sh` (cloned via git) |
 
 **Local repo:** `/path/to/llamaseye/llamaseye.sh`
 
